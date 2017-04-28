@@ -44,7 +44,7 @@ public class AES {
                 printByteOutput();
                 System.out.println();
             } else {
-                // Call helper AES messages to encrypt the plaintext
+                // Call helper AES methods to encrypt the plaintext
                 subBytes();
                 shiftRows();
                 //print2DStateArray();
