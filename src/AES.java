@@ -1,13 +1,13 @@
 /*
 Bradley White
 CSCI 476: Bonus Lab
-April 26, 2017
+April 27, 2017
  */
 
 public class AES {
     static char[][] plaintext = {{'a', 'e', 'i', 'm'}, {'b', 'f', 'j', 'n'}, {'c', 'g', 'k', 'o'}, {'d', 'h', 'l', 'p'}};
-    static int[] tran_matrix = {2, 3, 1, 1, 1, 2, 3, 1, 1, 1, 2, 3, 3, 1, 1, 2};
-    static byte[][] stateArray = new byte[plaintext.length][plaintext[0].length];
+    static int[][] tran_matrix = {{2, 3, 1, 1}, {1, 2, 3, 1}, {1, 1, 2, 3}, {3, 1, 1, 2}};
+    static int[][] stateArray = new int[plaintext.length][plaintext[0].length];
     static int[][] sbox = {
             {0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76},
             {0xCA, 0x82, 0xC9, 0x7D, 0xFA, 0x59, 0x47, 0xF0, 0xAD, 0xD4, 0xA2, 0xAF, 0x9C, 0xA4, 0x72, 0xC0},
@@ -27,13 +27,16 @@ public class AES {
             {0x8C, 0xA1, 0x89, 0x0D, 0xBF, 0xE6, 0x42, 0x68, 0x41, 0x99, 0x2D, 0x0F, 0xB0, 0x54, 0xBB, 0x16}};
 
     public static void main(String[] args) {
-        convertCharToByte();
+        // Call helper to populate the state array
+        convertCharToInt();
         //print2DStateArray();
         System.out.printf("The plaintext is:\n");
         printPlaintextOutput();
         System.out.printf("-----------------------------------------\n");
 
+        // Iterate through all 10 rounds
         for (int round = 1; round < 11; round++) {
+            // Special case to skip MixColumns in the last round
             if (round == 10) {
                 subBytes();
                 shiftRows();
@@ -41,9 +44,13 @@ public class AES {
                 printByteOutput();
                 System.out.println();
             } else {
+                // Call helper AES messages to encrypt the plaintext
                 subBytes();
-                //print2DStateArray();
                 shiftRows();
+                //print2DStateArray();
+                mixColumns();
+
+                // Output the state after each round
                 System.out.printf("After %d round(s), the state is\n", round);
                 printByteOutput();
                 //print2DStateArray();
@@ -55,17 +62,17 @@ public class AES {
     // S-box substitution step
     public static void subBytes() {
         // Used to store the split bytes, each will have four bits
-        byte higher, lower;
+        int higher, lower;
 
         // Iterate through the block of bytes
         for (int row = 0; row < stateArray.length; row++) {
             for (int col = 0; col < stateArray[0].length; col++) {
                 // Right shift the four left most bits and AND with 1111 bit mask
-                higher = (byte) ((stateArray[row][col] >> 4) & 0xF);
+                higher = ((stateArray[row][col] >> 4) & 0xF);
                 // Bit mask the four right most bits with 1111
-                lower = (byte) (stateArray[row][col] & 0xF);
+                lower = (stateArray[row][col] & 0xF);
                 // Substitute the byte in the byte block with the correct one from the sbox table
-                stateArray[row][col] = (byte) sbox[higher][lower];
+                stateArray[row][col] = sbox[higher][lower];
             }
         }
     }
@@ -75,7 +82,7 @@ public class AES {
         // Iterate through the block of bytes
         for (int row = 0; row < stateArray.length; row++) {
             // Use a working array to prevent overwritting bytes
-            byte[] workingArray = new byte[stateArray[row].length];
+            int[] workingArray = new int[stateArray[row].length];
             // Iterate through the row and put each byte in its correct position in the working array
             for (int col = 0; col < stateArray[0].length; col++) {
                 workingArray[col] = stateArray[row][(row + col) % 4];
@@ -89,17 +96,68 @@ public class AES {
 
     // Matrix multiplication step
     public static void mixColumns() {
+        // Hold the result for a single multiplication within the dot product
+        int result;
+        // Use a working array to avoid overwriting values in the state array
+        int[][] workingArray = new int[stateArray.length][stateArray[0].length];
 
+        // Iterate through the rows of the tran matrix
+        for (int i = 0; i < tran_matrix.length; i++) {
+            // Iterate through the columns of the state matrix
+            for (int j = 0; j < tran_matrix[0].length; j++) {
+                // Iterate through the values in each row/column to get the dot product
+                for (int k = 0; k < tran_matrix[0].length; k++) {
+                    // Reset to zero
+                    result = 0;
+                    // Special case when multiplying by three
+                    if (tran_matrix[i][k] == 3) {
+                        result ^= (2 * stateArray[k][j]) ^ stateArray[k][j];
+                    } else {
+                        result ^= (tran_matrix[i][k] * stateArray[k][j]);
+                    }
+                    // XOR with 283 (0001 0001 1011) to map to Galois Field
+                    if (result > 255) {
+                        result ^= 283;
+                    }
+                    // XOR with the accumulated sum for this position's dot product
+                    workingArray[i][j] ^= result;
+                }
+            }
+        }
+        // Update the state
+        stateArray = workingArray;
     }
 
-    public static void convertCharToByte() {
+    // Converts all the plaintext into the integer representation
+    public static void convertCharToInt() {
         for (int row = 0; row < plaintext.length; row++) {
             for (int col = 0; col < plaintext[row].length; col++) {
-                stateArray[row][col] = (byte) plaintext[row][col];
+                stateArray[row][col] = plaintext[row][col];
             }
         }
     }
 
+    // Prints the current state row by row in hex
+    public static void printByteOutput() {
+        for (int row = 0; row < stateArray[0].length; row++) {
+            for (int col = 0; col < stateArray.length; col++) {
+                System.out.printf("%02X ", stateArray[row][col]);
+            }
+        }
+        System.out.println();
+    }
+
+    // Prints the plaintext at the start of the program
+    public static void printPlaintextOutput() {
+        for (int col = 0; col < plaintext[0].length; col++) {
+            for (int row = 0; row < plaintext.length; row++) {
+                System.out.printf("%c ", plaintext[row][col]);
+            }
+        }
+        System.out.println();
+    }
+
+    // These two methods were used for debugging purposes to print in an array format
     public static void print2DPlaintext() {
         for (int row = 0; row < plaintext.length; row++) {
             for (int col = 0; col < plaintext[row].length; col++) {
@@ -116,25 +174,5 @@ public class AES {
             }
             System.out.println();
         }
-    }
-
-    public static void printByteOutput() {
-        for (int col = 0; col < stateArray[0].length; col++) {
-            for (int row = 0; row < stateArray.length; row++) {
-                System.out.printf("%02X ", stateArray[row][col]);
-            }
-        }
-        System.out.println();
-    }
-
-
-    public static void printPlaintextOutput() {
-        for (int col = 0; col < plaintext[0].length; col++) {
-            for (int row = 0; row < plaintext.length; row++) {
-                System.out.printf("%c(%x) ", plaintext[row][col], (byte) plaintext[row][col]);
-                //System.out.printf("%c", plaintext[row][col]);
-            }
-        }
-        System.out.println();
     }
 }
